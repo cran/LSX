@@ -1,8 +1,8 @@
-12f8e26a2029550628347bfb06aeaea0 *DESCRIPTION
+f5e255972f51daedd6ea383fcbd91950 *DESCRIPTION
 0c34a5f8ce073df85856da29e0ea3b07 *NAMESPACE
 6f922bbba086a88e12577d5e8e8d04b4 *NEWS.md
 a21e4628563b3e5bee8314f7add85c96 *R/data.R
-bd09d3c349e5830f305a013301cbed23 *R/textmodel.R
+b7d77ddd6215cb96cf053976cdda4c61 *R/textmodel.R
 caa3a06337cd59a0d20eca1d2ae09466 *R/textplot.R
 1a3e9a73fb9e4848512c8e6168fd7ad7 *R/utils.R
 eaa54e3731554da0106579b66f62b5d6 *data/data_dictionary_ideology.RData
@@ -10,7 +10,7 @@ eaa54e3731554da0106579b66f62b5d6 *data/data_dictionary_ideology.RData
 fb9853476c98b1a320265ca419c23e90 *data/data_textmodel_lss_russianprotests.rda
 c3c7ea7ecbfa1dd5a22dcd58a841dcf4 *man/as.seedwords.Rd
 42c6680a9b1440f3ac9a37ac94f7d20e *man/as.textmodel_lss.Rd
-e6e962e0d701631eb4a4e03dcda1b18b *man/char_keyness.Rd
+d4456c347955cadcdd2b35733427b78e *man/char_keyness.Rd
 58bb355a9d528d8bd93c3e8d40e2e7bc *man/coef.textmodel_lss.Rd
 d3469717c66686ef3df94fe1ea496d55 *man/cohesion.Rd
 0226dc36ae2d8c75ee6807af3d188822 *man/data_dictionary_ideology.Rd
@@ -23,12 +23,13 @@ b7185f121562b3641b4f180944710894 *man/predict.textmodel_lss.Rd
 ac8a686dd6e0851fadd2b80973d06d1d *man/reexports.Rd
 3ebae6d810d3e87a07a680bffc9edf31 *man/seedwords.Rd
 7bd76026442cb6614085853ed624fc14 *man/smooth_lss.Rd
-6b600bc22a26c8954be9a6d46f65fd1d *man/textmodel_lss.Rd
+1bae1cd737eaa0ea1148231b8adcb60a *man/textmodel_lss.Rd
 42efddd6b0c5a92b8b1d4c22949faa5f *man/textplot_factor.Rd
 7c188e85b968cdfe35d8b93b70eff04f *man/textplot_simil.Rd
 4f31f620f247ff58088b5fde3826f10f *man/textplot_terms.Rd
 1e85bec1ddc29c3da17569edb668ea2d *man/weight_seeds.Rd
+08a8ef14b6fdad522d28a27daf263084 *tests/data/tokens_test.RDS
 dbe658e67cf4552f110d2186c9216f4c *tests/testthat.R
-250a58b1eca7b9cc3bacb02bab4ca0a3 *tests/testthat/test-textmodel.R
-a33462162d0fb350460a9618b65b8c5a *tests/testthat/test-textplot.R
-892b7e747f6ccbebf053c6e4132ef54d *tests/testthat/test-utils.R
+5dafd959931691b3c0c35b94012b271b *tests/testthat/test-textmodel.R
+f807c614f38fb5094f6d84796008b073 *tests/testthat/test-textplot.R
+7a131b0bd86083cf50db81b8d951ed85 *tests/testthat/test-utils.R
