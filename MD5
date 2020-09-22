@@ -1,6 +1,6 @@
-f5e255972f51daedd6ea383fcbd91950 *DESCRIPTION
+dab535a9b2d23fc2002d3822615b27b6 *DESCRIPTION
 0c34a5f8ce073df85856da29e0ea3b07 *NAMESPACE
-6f922bbba086a88e12577d5e8e8d04b4 *NEWS.md
+e0b779f805a4078ddeb6d31b3695d5b8 *NEWS.md
 a21e4628563b3e5bee8314f7add85c96 *R/data.R
 b7d77ddd6215cb96cf053976cdda4c61 *R/textmodel.R
 caa3a06337cd59a0d20eca1d2ae09466 *R/textplot.R
@@ -30,6 +30,6 @@ ac8a686dd6e0851fadd2b80973d06d1d *man/reexports.Rd
 1e85bec1ddc29c3da17569edb668ea2d *man/weight_seeds.Rd
 08a8ef14b6fdad522d28a27daf263084 *tests/data/tokens_test.RDS
 dbe658e67cf4552f110d2186c9216f4c *tests/testthat.R
-5dafd959931691b3c0c35b94012b271b *tests/testthat/test-textmodel.R
-f807c614f38fb5094f6d84796008b073 *tests/testthat/test-textplot.R
-7a131b0bd86083cf50db81b8d951ed85 *tests/testthat/test-utils.R
+9b81cfd1851ddf0d9598083624d109cf *tests/testthat/test-textmodel.R
+1b8f38ca5a8a6e47494c676944b1f913 *tests/testthat/test-textplot.R
+2eb833aeaac66e47ba5758315908d594 *tests/testthat/test-utils.R
