@@ -31,20 +31,21 @@ test_that("char_keyness is working", {
     feat4 <- char_keyness(toks_test, "america*", min_count = 1000, remove_pattern = FALSE)
     expect_identical(feat4, character())
 
-    expect_error(char_keyness(toks_test, "xxxxx", min_count = 1, p = 0.05),
-                 "xxxxx is not found")
+    expect_silent(char_keyness(toks_test, "xxxxx", min_count = 1, p = 0.05))
 
 })
 
 test_that("char_keyness removes multi-word target", {
 
-    feat_rp <- char_keyness(toks_test, phrase("united states"), "regex",
-                            min_count = 1, p = 0.05)
+    suppressWarnings({
+        feat_rp <- char_keyness(toks_test, phrase("united states"),
+                                min_count = 1, p = 0.05, window = 0)
+    })
     expect_identical(c("united", "states") %in% feat_rp,
                      c(FALSE, FALSE))
 
-    feat_kp <- char_keyness(toks_test, phrase("united states"), "regex",
-                            min_count = 1, p = 0.05, remove_pattern = FALSE)
+    feat_kp <- char_keyness(toks_test, phrase("united states"),
+                            min_count = 1, p = 0.05, , window = 0, remove_pattern = FALSE)
     expect_identical(c("united", "states") %in% feat_kp,
                      c(TRUE, TRUE))
 })
@@ -53,19 +54,21 @@ test_that("textmodel_lss has all the attributes", {
 
     expect_equal(
         names(lss_test),
-        c("beta", "k", "slice", "frequency", "terms", "seeds",
-          "embedding", "similarity", "relevance", "importance", "call",  "data")
+        c("data", "beta", "k", "slice", "frequency", "terms", "seeds", "seeds_weighted",
+          "embedding", "similarity", "importance",
+          "concatenator", "dummy", "call")
     )
 
     expect_true(is.numeric(lss_test$beta))
     expect_true(is.dfm(lss_test$data))
     expect_identical(lss_test$terms, feat_test)
-    expect_identical(names(lss_test$seeds), names(seedwords("pos-neg")))
+    expect_identical(names(lss_test$seeds_weighted), names(seedwords("pos-neg")))
 
     expect_equal(
         names(lss_test_nd),
-        c("beta", "k", "slice", "frequency", "terms", "seeds",
-          "embedding", "similarity", "relevance", "importance", "call")
+        c("data", "beta", "k", "slice", "frequency", "terms", "seeds", "seeds_weighted",
+          "embedding", "similarity", "importance",
+          "concatenator", "dummy", "call")
     )
 
 })
@@ -156,12 +159,16 @@ test_that("calculation of fit and se.fit are correct", {
 
 })
 
-test_that("as.textmodel_lss works with only with single seed", {
+test_that("textmodel_lss works with only with single seed", {
     expect_silent(textmodel_lss(dfm(toks_test), seedwords("pos-neg")[1], terms = feat_test, k = 10))
     expect_silent(textmodel_lss(dfm(toks_test), seedwords("pos-neg")[1], terms = character(), k = 10))
     expect_silent(textmodel_lss(dfm(toks_test), seedwords("pos-neg")[1], k = 10))
 })
 
+test_that("terms work with glob", {
+    lss <- textmodel_lss(dfmt_test, seed, terms = "poli*", k = 300)
+    expect_true(all(stringi::stri_startswith_fixed(names(coef(lss)), "poli")))
+})
 
 test_that("simil_method works", {
 
@@ -184,7 +191,7 @@ test_that("include_data is working", {
     expect_identical(predict(lss), predict(lss_nd, newdata = dfmt))
 })
 
-test_that("predict.textmodel_lss retuns NA for empty documents", {
+test_that("predict.textmodel_lss computes scores correctly", {
 
     dfmt <- dfm_group(dfm(toks_test))
     dfmt[c(3, 10),] <- 0
@@ -199,6 +206,12 @@ test_that("predict.textmodel_lss retuns NA for empty documents", {
                  c("1789-Washington" = FALSE, "1797-Adams" = TRUE, "1825-Adams" = TRUE))
     expect_equal(is.na(pred2$se.fit[c(1, 3, 10)]), c(FALSE, TRUE, TRUE))
     expect_equal(pred2$n[c(1, 3, 10)] == 0, c(FALSE, TRUE, TRUE))
+
+    load("../data/prediction_v0.93.RDA")
+    expect_equal(pred, pred_v093, tolerance = 0.0001)
+    expect_equal(pred2$fit, pred2_v093$fit, tolerance = 0.0001)
+    expect_equal(pred2$se.fit, pred2_v093$se.fit, tolerance = 0.0001)
+    expect_equal(pred2$n, pred2_v093$n)
 })
 
 
@@ -206,9 +219,11 @@ test_that("textmodel_lss works with glob patterns", {
     dfmt <- dfm(toks_test)
     seed <- c("nice*" = 1, "positive*" = 1, "bad*" = -1, "negative*" = -1)
     lss <- textmodel_lss(dfmt, seed, k = 10)
-    expect_equal(names(lss$seeds), names(seed))
-    expect_equal(lengths(lss$seeds),
+    expect_equal(names(lss$seeds_weighted), names(seed))
+    expect_equal(lengths(lss$seeds_weighted),
                  c("nice*" = 0, "positive*" = 2, "bad*" = 3, "negative*" = 1))
+
+
 })
 
 test_that("textmodel_lss works with non-existent seeds", {
@@ -267,35 +282,73 @@ test_that("slice argument is working", {
 })
 
 test_that("test smooth_lss", {
-    lss <- sample(1:10 / 100, size = 1000, replace = TRUE)
-    date <- sample(seq(as.Date("2020-01-01"), as.Date("2020-12-31"), by = "1 day"),
-                   size = 1000, replace = TRUE)
-    char <- sample(letters, size = 1000, replace = TRUE)
-    expect_silent(smooth_lss(data.frame(fit = lss, date = date)))
+
+    set.seed(1234)
+    dfmt <- dfm_sample(dfmt_test, size = 1000)
+    dat <- docvars(dfmt)
+    dat$lss <- predict(lss_test, newdata = dfmt)
+    dat$time <- as.Date(paste0(dat$Year, "-01-01"))
+    expect_silent(smooth_lss(dat, lss_var = "lss", date_var = "time"))
     expect_error(
-        smooth_lss(data.frame(score = lss, date = date)),
+        smooth_lss(dat),
         "fit does not exist in x"
     )
     expect_error(
-        smooth_lss(data.frame(fit = char, date = date)),
-        "fit must be a numeric column"
+        smooth_lss(smooth_lss(dat, lss_var = "President")),
+        "lss_var must be a numeric column"
     )
     expect_error(
-        smooth_lss(data.frame(fit = lss, published = date)),
+        smooth_lss(dat, lss_var = "lss"),
         "date does not exist in x"
     )
     expect_error(
-        smooth_lss(data.frame(fit = lss, date = char)),
-        "date must be a date column"
+        smooth_lss(dat, lss_var = "lss", date_var = "Year"),
+        "date_var must be a date column"
     )
-    expect_silent(
-        smooth_lss(data.frame(score = lss, published = date),
-                   lss_var = "score", "date_var" = "published")
-    )
+
+    dat_loess <- smooth_lss(dat, lss_var = "lss", date_var = "time",
+                            engine = "loess")
+    dat_locfit <- smooth_lss(dat, lss_var = "lss", date_var = "time",
+                             engine = "locfit")
+    expect_true(cor(dat_loess$fit, dat_locfit$fit) > 0.90)
 })
 
-test_that("test with single seed", {
+test_that("works with single seed", {
     expect_silent(cohesion(lss_test))
     expect_silent(strength(lss_test))
 })
 
+test_that("weight_seeds() works", {
+    expect_equal(
+        LSX:::weight_seeds(c("a*" = 1, "b*" = -1), c("aa", "aaa", "bb", "bbb")),
+        list("a*" = c("aa" = 0.5, "aaa" = 0.5),
+             "b*" = c("bb" = -0.5, "bbb" = -0.5))
+    )
+    expect_equal(
+        LSX:::weight_seeds(c("a*" = 1), c("aa", "aaa", "bb", "bbb")),
+        list("a*" = c("aa" = 0.5, "aaa" = 0.5))
+    )
+    expect_equal(
+        LSX:::weight_seeds(c("a*" = 1, "c*" = -1), c("aa", "aaa", "bb", "bbb")),
+        list("a*" = c("aa" = 0.5, "aaa" = 0.5),
+             "c*" = numeric())
+    )
+    expect_equal(
+        LSX:::weight_seeds(c("a*" = 1, "b*" = 1), c("aa", "aaa", "bb", "bbb")),
+        list("a*" = c("aa" = 0.25, "aaa" = 0.25),
+             "b*" = c("bb" = 0.25, "bbb" = 0.25))
+    )
+    expect_equal(
+        LSX:::weight_seeds(c("aa" = 1, "aaa" = 1, "bb" = 1), c("aa", "aaa", "bb", "bbb")),
+        list("aa" = c("aa" = 0.333),
+             "aaa" = c("aaa" = 0.333),
+             "bb" = c("bb" = 0.333)),
+        tolerance = 0.01
+    )
+    expect_equal(
+        LSX:::weight_seeds(c("aa" = 1, "aaa" = 1, "bb" = -1), c("aa", "aaa", "bb", "bbb")),
+        list("aa" = c("aa" = 0.5),
+             "aaa" = c("aaa" = 0.5),
+             "bb" = c("bb" = -1)),
+    )
+})

@@ -78,33 +78,31 @@ textmodel_lss.dfm <- function(x, seeds, terms = NULL, k = 300, slice = NULL,
                               verbose = FALSE, ...) {
 
     unused_dots(...)
-    args <- list(...)
+    args <- list(terms = terms, seeds = seeds, ...)
     if ("features" %in% names(args)) {
         .Deprecated(msg = "'features' is deprecated; use 'terms'\n")
         terms <- args$features
     }
+
     engine <- match.arg(engine)
-    terms <- check_terms(terms, featnames(x))
-    seeds <- check_seeds(seeds, featnames(x), verbose)
+    terms <- expand_terms(terms, featnames(x))
+    seeds <- expand_seeds(seeds, featnames(x), verbose)
+
+    term <- unlist(unname(terms))
+    seed <- names(unlist(unname(seeds)))
+    feat <- union(term, seed)
 
     if (engine %in% c("RSpectra", "irlba", "rsvd")) {
         if (verbose)
             cat("Performing SVD by ", engine, "...\n")
         svd <- cache_svd(x, k, weight, engine, cache, ...)
-        temp <- t(svd$v)
-        colnames(temp) <- featnames(x)
-        embed <- Matrix::Matrix(temp, sparse = TRUE)
+        embed <- t(svd$v)
+        colnames(embed) <- featnames(x)
+        embed <- embed[,feat, drop = FALSE]
         import <- svd$d
     }
     if (is.null(slice))
         slice <- k
-
-    # identify relevance to seed words
-    seed <- unlist(unname(seeds))
-    cos <- proxyC::simil(embed[, names(seed), drop = FALSE],
-                         Matrix::Matrix(seed, nrow = 1, sparse = TRUE),
-                         margin = 1)
-    relev <- abs(as.numeric(cos))
 
     k <- as.integer(k)
     slice <- as.integer(slice)
@@ -112,19 +110,24 @@ textmodel_lss.dfm <- function(x, seeds, terms = NULL, k = 300, slice = NULL,
         stop("'slice' must be between 1 and k")
     if (length(slice) == 1)
         slice <- seq_len(slice)
-    simil <- get_simil(embed, seeds, terms, slice, simil_method)
-    beta <- get_beta(simil$terms, seeds)
-    result <- list(beta = beta,
-                   k = k, slice = slice,
-                   frequency = colSums(x)[names(beta)],
-                   terms = terms,
-                   seeds = seeds,
-                   embedding = embed,
-                   similarity = simil$seed,
-                   relevance = relev,
-                   importance = import,
-                   call = match.call())
 
+    simil <- get_simil(embed, seed, term, slice, simil_method)
+    beta <- get_beta(simil$terms, seeds)
+
+    result <- build_lss(
+        beta = beta,
+        k = k,
+        slice = slice,
+        frequency = colSums(x)[names(beta)],
+        terms = args$terms,
+        seeds = args$seeds,
+        seeds_weighted = seeds,
+        embedding = embed,
+        similarity = simil$seed,
+        importance = import,
+        concatenator = meta(x, field = "concatenator", type = "object"),
+        call = match.call()
+    )
     if (include_data)
         result$data <- x
     class(result) <- "textmodel_lss"
@@ -142,7 +145,7 @@ textmodel_lss.fcm <- function(x, seeds, terms = NULL, w = 50,
                               verbose = FALSE, ...) {
 
     unused_dots(...)
-    args <- list(...)
+    args <- list(terms = terms, seeds = seeds, ...)
     if ("features" %in% names(args)) {
         .Deprecated(msg = "'features' is deprecated; use 'terms'.\n")
         terms <- args$features
@@ -151,44 +154,77 @@ textmodel_lss.fcm <- function(x, seeds, terms = NULL, w = 50,
         .Deprecated(msg = "GloVe engine has been moved to from text2vec to rsparse.\n")
         engine <- "rsparse"
     }
-    engine <- match.arg(engine)
-    terms <- check_terms(terms, featnames(x))
-    seeds <- check_seeds(seeds, featnames(x), verbose)
+
+    terms <- expand_terms(terms, featnames(x))
+    seeds <- expand_seeds(seeds, featnames(x), verbose)
+
+    term <- unlist(unname(terms))
+    seed <- names(unlist(unname(seeds)))
+    feat <- union(term, seed)
 
     if (engine == "rsparse") {
         if (verbose)
             cat("Fitting GloVe model by rsparse...\n")
-        glove <- cache_glove(x, w, cache, ...)
-        embed <- as(glove, "dgCMatrix")
+        embed <- cache_glove(x, w, cache, ...)
+        embed <- embed[,feat, drop = FALSE]
     }
 
-    simil <- get_simil(embed, seeds, terms, seq_len(w), simil_method)
+    simil <- get_simil(embed, seed, term, seq_len(w), simil_method)
     beta <- get_beta(simil$terms, seeds)
 
-    result <- list(beta = beta,
-                   w = w,
-                   terms = terms,
-                   seeds = seeds,
-                   embedding = embed,
-                   similarity = simil$seed,
-                   call = match.call())
-
+    result <- build_lss(
+        beta = beta,
+        w = w,
+        terms = args$terms,
+        seeds = args$seeds,
+        seeds_weighted = seeds,
+        embedding = embed,
+        similarity = simil$seed,
+        call = match.call()
+    )
     class(result) <- "textmodel_lss"
     return(result)
 }
 
-check_terms <- function(terms, features) {
+build_lss <- function(...) {
+
+    args <- list(...)
+    result <- list(
+        data = NULL,
+        beta = NULL,
+        k = NULL,
+        slice = NULL,
+        frequency = NULL,
+        terms = NULL,
+        seeds = NULL,
+        seeds_weighted = NULL,
+        embedding = NULL,
+        similarity = NULL,
+        importance = NULL,
+        concatenator = "_",
+        dummy = FALSE,
+        call = NULL
+    )
+    for (m in intersect(names(result), names(args))) {
+        result[m] <- args[m]
+    }
+    class(result) <- "textmodel_lss"
+    return(result)
+}
+
+expand_terms <- function(terms, features) {
+
     if (is.null(terms))
         terms <- features
     if (!is.character(terms))
         stop("features must be a character vector\n", call. = FALSE)
-    intersect(terms, features)
+    pattern2fixed(terms, features, "glob", FALSE)
 }
 
-check_seeds <- function(seeds, features, verbose = FALSE) {
+expand_seeds <- function(seeds, features, verbose = FALSE) {
+
     seeds <- get_seeds(seeds)
-    seeds_weighted <- mapply(weight_seeds, names(seeds), unname(seeds) / length(seeds),
-                             MoreArgs = list(features), USE.NAMES = TRUE, SIMPLIFY = FALSE)
+    seeds_weighted <- weight_seeds(seeds, features)
 
     if (all(lengths(seeds_weighted) == 0))
         stop("No seed word is found in the dfm", call. = FALSE)
@@ -200,14 +236,13 @@ check_seeds <- function(seeds, features, verbose = FALSE) {
     return(seeds_weighted)
 }
 
-get_simil <- function(embed, seeds, terms, slice, method = "cosine") {
-    seed <- unlist(unname(seeds))
+get_simil <- function(embed, seed, term, slice, method = "cosine") {
+    embed <- as(embed, "dgCMatrix")
     simil <- as.matrix(proxyC::simil(embed[slice,,drop = FALSE],
-                                     embed[slice,names(seed),drop = FALSE],
+                                     embed[slice,seed,drop = FALSE],
                                      margin = 2, method = method))
-    list("terms" = simil[unlist(pattern2fixed(terms, rownames(simil), "glob", FALSE)),,drop = FALSE],
-         "seeds" = simil[rownames(simil) %in% names(seed),
-                         colnames(simil) %in% names(seed), drop = FALSE])
+    list("terms" = simil[term,, drop = FALSE],
+         "seeds" = simil[seed, seed, drop = FALSE])
 }
 
 get_beta <- function(simil, seeds) {
@@ -334,11 +369,22 @@ coefficients.textmodel_lss <- function(object, ...) {
 #' Internal function to generate equally-weighted seed set
 #'
 #' @keywords internal
-weight_seeds <- function(seed, weight, type) {
-    s <- unlist(pattern2fixed(seed, type, "glob", FALSE))
-    v <- rep(weight / length(s), length(s))
-    names(v) <- s
-    return(v)
+weight_seeds <- function(seeds, type) {
+    seeds_fix <- lapply(names(seeds), function(x) {
+        s <- unlist(pattern2fixed(x, type, "glob", FALSE))
+        if (is.null(s))
+            return(character())
+        return(s)
+    })
+    weight <- 1 / table(seeds > 0)
+    mapply(function(x, y) {
+              if (!length(y))
+                  return(numeric())
+              v <- unname(x * weight[as.character(x > 0)]) / length(y)
+              v <- rep(v, length(y))
+              names(v) <- y
+              return(v)
+           }, seeds, seeds_fix, SIMPLIFY = FALSE)
 }
 
 #' Prediction method for textmodel_lss
@@ -363,7 +409,7 @@ predict.textmodel_lss <- function(object, newdata = NULL, se.fit = FALSE,
                     dimnames = list(NULL, names(object$beta)))
 
     if (is.null(newdata)) {
-        if (!any("data" == names(object)))
+        if (is.null(object$data))
             stop("LSS model includes no data, please supply a dfm using newdata.\n")
         data <- object$data
     } else {
@@ -426,6 +472,7 @@ predict.textmodel_lss <- function(object, newdata = NULL, se.fit = FALSE,
 #' @export
 #' @seealso [tokens_select()] and [textstat_keyness()]
 #' @examples
+#' #' @examples
 #' \donttest{
 #' require(quanteda)
 #' con <- url("https://bit.ly/2GZwLcN", "rb")
@@ -436,146 +483,63 @@ predict.textmodel_lss <- function(object, newdata = NULL, se.fit = FALSE,
 #' toks <- tokens_remove(toks, stopwords())
 #'
 #' # economy keywords
-#' eco <- char_keyness(toks, 'econom*')
+#' eco <- char_context(toks, 'econom*')
 #' head(eco, 20)
 #'
+#' tstat_eco <- textstat_context(toks, 'econom*')
+#' head(tstat_eco)
+#'
 #' # politics keywords
-#' pol <- char_keyness(toks, 'politi*')
+#' pol <- char_context(toks, 'politi*')
 #' head(pol, 20)
+#'
+#' # politics keywords
+#' tstat_pol <- textstat_context(toks, 'politi*')
+#' head(tstat_pol)
 #' }
-char_keyness <- function(x, pattern, valuetype = c("glob", "regex", "fixed"),
-                         case_insensitive = TRUE, window = 10, p = 0.001, min_count = 10,
+textstat_context <- function(x, pattern, valuetype = c("glob", "regex", "fixed"),
+                         case_insensitive = TRUE, window = 10, min_count = 10,
                          remove_pattern = TRUE, ...) {
     if (!is.tokens(x))
         stop("x must be a tokens object\n", call. = FALSE)
 
     # reference
-    ref <- dfm(tokens_remove(x, pattern, valuetype = valuetype,
-                             case_insensitive = case_insensitive,
-                             window = window))
+    y <- tokens_remove(x, pattern, valuetype = valuetype,
+                       case_insensitive = case_insensitive,
+                       window = window, padding = FALSE)
+    y <- dfm(y, remove = "")
 
     # target
     x <- tokens_select(x, pattern, valuetype = valuetype,
                        case_insensitive = case_insensitive,
-                       window = window)
+                       window = window, padding = FALSE)
     if (remove_pattern)
         x <- tokens_remove(x, pattern, valuetype = valuetype,
                            case_insensitive = case_insensitive)
+    x <- dfm(x, remove = "")
 
-    tar <- dfm_remove(dfm(x), pattern = "")
-    if (nfeat(tar) == 0)
-        stop(paste(unlist(pattern), collapse = ", "), " is not found\n", call. = FALSE)
-    tar <- dfm_trim(tar, min_termfreq = min_count)
-    if (nfeat(tar) == 0)
-        return(character())
-    ref <- dfm_match(ref, featnames(tar))
+    x <- dfm_trim(x, min_termfreq = min_count)
+    y <- dfm_match(y, featnames(x))
+    if (sum(x) > 0) {
+        result <- textstat_keyness(as.dfm(rbind(colSums(x), colSums(y))), ...)
+    } else {
+        result <- head(textstat_keyness(as.dfm(matrix(c(1, 0))), ...), 0) # dummy object
+    }
+    colnames(result)[c(4, 5)] <- c("n_inside", "n_outside")
+    return(result)
+}
 
-    result <- textstat_keyness(as.dfm(rbind(colSums(tar), colSums(ref))), ...)
+#' @rdname textstat_context
+#' @export
+char_context <- function(x, ..., p = 0.001) {
+    result <- textstat_context(x, ...)
     result <- result[result$p < p,]
     return(result$feature)
 }
 
-#' Seed words for Latent Semantci Analysis
-#'
-#' @param type type of seed words currently only for sentiment (`sentiment`)
-#'   or political ideology (`ideology`).
+#' @rdname textstat_context
 #' @export
-#' @examples
-#' seedwords('sentiment')
-#' @references Turney, P. D., & Littman, M. L. (2003). Measuring Praise and
-#'   Criticism: Inference of Semantic Orientation from Association. ACM Trans.
-#'   Inf. Syst., 21(4), 315–346. https://doi.org/10.1145/944012.944013
-seedwords <- function(type) {
-
-    if (type == "pos-neg" || type == "sentiment") {
-        seeds <- c(rep(1, 7), rep(-1, 7))
-        names(seeds) <- c("good", "nice", "excellent", "positive", "fortunate", "correct", "superior",
-                          "bad", "nasty", "poor", "negative", "unfortunate", "wrong", "inferior")
-    } else if (type == "left-right" || type == "ideology") {
-        seeds <- c(rep(1, 7), rep(-1, 7))
-        names(seeds) <- c("deficit", "austerity", "unstable", "recession", "inflation", "currency", "workforce",
-                          "poor", "poverty", "free", "benefits", "prices", "money", "workers")
-    } else {
-        stop(type, "is not currently available", call. = FALSE)
-    }
-    return(seeds)
+char_keyness <- function(x, ..., p = 0.001) {
+    char_context(x, ..., p = p)
 }
 
-#' Create a dummy textmodel_lss object from numeric vector
-#' @param x a named numeric vector
-#' @keywords internal
-#' @export
-#' @examples
-#' v <- c("a" = 0.1, "z" = -0.2, "d" = 0.3, "h" = -0.05)
-#' lss <- as.textmodel_lss(v)
-#' @return a textmodel_lss object with `x` as polarity words
-as.textmodel_lss <- function(x) {
-
-    stopifnot(is.numeric(x))
-    stopifnot(!is.null(names(x)))
-
-    result <- list(beta = x,
-                   data = NULL,
-                   terms = names(x),
-                   seeds = character(),
-                   call = match.call())
-    class(result) <- "textmodel_lss"
-    return(result)
-}
-
-#' Smooth predicted LSS scores by local polynomial regression
-#'
-#' @param x a `data.frame` containing variables for LSS scores and dates
-#' @param lss_var the name of the column for LSS scores
-#' @param date_var the name of the columns for dates
-#' @param span determines the level of smoothing
-#' @param from start of the time period
-#' @param to end of the time period
-#' @param ... extra arguments passed to [loess()]
-#' @export
-#' @import stats
-smooth_lss <- function(x, lss_var = "fit", date_var = "date", span = 0.1,
-                       from = NULL, to = NULL, ...) {
-
-    if (lss_var %in% names(x)) {
-        if (!identical(class(x[[lss_var]]), "numeric"))
-            stop(lss_var, " must be a numeric column")
-    } else {
-        stop(lss_var, " does not exist in x")
-    }
-
-    if (date_var %in% names(x)) {
-        if (!identical(class(x[[date_var]]), "Date"))
-            stop(date_var, " must be a date column")
-    } else {
-        stop(date_var, " does not exist in x")
-    }
-
-    x$lss <- x[[lss_var]]
-    x$date <- x[[date_var]]
-    if (is.null(from))
-        from <- min(x$date)
-    if (is.null(to))
-        to <- max(x$date)
-    x$time <- as.numeric(difftime(x$date, from, units = "days"))
-    dummy <- data.frame(date = seq(from, to, '1 day'))
-    dummy$time <- as.numeric(difftime(dummy$date, from, units = "days"))
-    dummy$fit <- NA
-    suppressWarnings(
-        temp <- predict(loess(lss ~ time, data = x, span = span, ...),
-                        newdata = dummy, se = TRUE)
-    )
-    result <- cbind(dummy[c("date", "time")], temp[c("fit", "se.fit")])
-    return(result)
-}
-
-#' @export
-#' @method print textmodel_lss
-print.textmodel_lss <- function(x, ...) {
-    cat("\nCall:\n")
-    print(x$call)
-    cat("\n",
-        "Seeds:", names(x$seed), ";",
-        "k:", x$k, ";",
-        "\n", sep = " ")
-}
