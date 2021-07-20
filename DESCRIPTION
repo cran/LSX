@@ -1,8 +1,8 @@
 Package: LSX
 Type: Package
 Title: Model for Semisupervised Text Analysis Based on Word Embeddings
-Date: 2021-04-16
-Version: 0.9.9
+Date: 2021-07-20
+Version: 1.0.0
 Authors@R: person("Kohei", "Watanabe", email = "watanabe.kohei@gmail.com", role = c("aut", "cre", "cph"))
 Description: A word embeddings-based semisupervised model for document scaling Watanabe (2020) <doi:10.1080/19312458.2020.1832976>.
     LSS allows users to analyze large and complex corpora on arbitrary dimensions with seed words exploiting efficiency of word embeddings (SVD, Glove).
@@ -18,8 +18,8 @@ Suggests: testthat
 RoxygenNote: 7.1.1
 BugReports: https://github.com/koheiw/LSX/issues
 NeedsCompilation: no
-Packaged: 2021-04-18 23:05:53 UTC; kohei
+Packaged: 2021-07-20 01:08:27 UTC; kohei
 Author: Kohei Watanabe [aut, cre, cph]
 Maintainer: Kohei Watanabe <watanabe.kohei@gmail.com>
 Repository: CRAN
-Date/Publication: 2021-04-19 09:30:02 UTC
+Date/Publication: 2021-07-20 05:00:06 UTC

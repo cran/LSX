@@ -13,10 +13,10 @@
 #' @param cache if `TRUE`, save result of SVD for next execution with identical
 #'   `x` and settings. Use the `base::options(lss_cache_dir)` to change the
 #'   location cache files to be save.
-#' @param engine choose SVD engine between [RSpectra::svds()], [irlba::irlba()],
-#'   and [rsparse::GloVe()].
+#' @param engine select the engine to factorize `x` to get word vectors. Choose
+#' from [RSpectra::svds()], [irlba::irlba()], [rsvd::rsvd()], and [rsparse::GloVe()].
 #' @param verbose show messages if `TRUE`.
-#' @param ... additional argument passed to the SVD engine
+#' @param ... additional arguments passed to the underlying engine.
 #' @export
 #' @references
 #' Watanabe, Kohei. 2020. "Latent Semantic Scaling: A Semisupervised
@@ -80,7 +80,6 @@ textmodel_lss.dfm <- function(x, seeds, terms = NULL, k = 300, slice = NULL,
                               include_data = FALSE,
                               verbose = FALSE, ...) {
 
-    unused_dots(...)
     args <- list(terms = terms, seeds = seeds, ...)
     if ("features" %in% names(args)) {
         .Deprecated(msg = "'features' is deprecated; use 'terms'\n")
@@ -95,7 +94,7 @@ textmodel_lss.dfm <- function(x, seeds, terms = NULL, k = 300, slice = NULL,
 
     if (engine %in% c("RSpectra", "irlba", "rsvd")) {
         if (verbose)
-            cat("Performing SVD by ", engine, "...\n")
+            cat(sprintf("Performing SVD by %s...\n", engine))
         svd <- cache_svd(x, k, weight, engine, cache, ...)
         embed <- t(svd$v)
         colnames(embed) <- featnames(x)
@@ -136,17 +135,20 @@ textmodel_lss.dfm <- function(x, seeds, terms = NULL, k = 300, slice = NULL,
 }
 
 #' @rdname textmodel_lss
-#' @param w the size of word vectors. Only used when `x` is a `fcm`
+#' @param w the size of word vectors. Used only when `x` is a `fcm`.
+#' @param max_count passed to `x_max` in `rsparse::GloVe$new()` where cooccurrence
+#'   counts are ceiled to this threshold. It should be changed according to the
+#'   size of the corpus. Used only when `x` is a `fcm`.
 #' @method textmodel_lss fcm
 #' @importFrom quanteda featnames
 #' @export
 textmodel_lss.fcm <- function(x, seeds, terms = NULL, w = 50,
+                              max_count = 10,
                               weight = "count", cache = FALSE,
                               simil_method = "cosine",
                               engine = c("rsparse"),
                               verbose = FALSE, ...) {
 
-    unused_dots(...)
     args <- list(terms = terms, seeds = seeds, ...)
     if ("features" %in% names(args)) {
         .Deprecated(msg = "'features' is deprecated; use 'terms'.\n")
@@ -165,7 +167,7 @@ textmodel_lss.fcm <- function(x, seeds, terms = NULL, w = 50,
     if (engine == "rsparse") {
         if (verbose)
             cat("Fitting GloVe model by rsparse...\n")
-        embed <- cache_glove(x, w, cache, ...)
+        embed <- cache_glove(x, w, x_max = max_count, cache = cache, ...)
         embed <- embed[,feat, drop = FALSE]
     }
 
@@ -175,6 +177,7 @@ textmodel_lss.fcm <- function(x, seeds, terms = NULL, w = 50,
     result <- build_lss(
         beta = beta,
         w = w,
+        frequency = x@meta$object$margin[names(beta)],
         terms = args$terms,
         seeds = args$seeds,
         seeds_weighted = seeds,
@@ -231,8 +234,8 @@ expand_seeds <- function(seeds, features, verbose = FALSE) {
         stop("No seed word is found in the dfm", call. = FALSE)
 
     if (verbose)
-        cat("Calculating term-term similarity to", sum(lengths(seeds_weighted)),
-            "seed words...\n")
+        cat(sprintf("Calculating term-term similarity to %d seed words...\n",
+            sum(lengths(seeds_weighted))))
 
     return(seeds_weighted)
 }
@@ -250,13 +253,13 @@ get_beta <- function(simil, seeds) {
     seed <- unlist(unname(seeds))
     if (!identical(colnames(simil), names(seed)))
         stop("Columns and seed words do not match", call. = FALSE)
-    sort(Matrix::rowMeans(simil %*% seed), decreasing = TRUE)
+    Matrix::rowMeans(simil %*% seed)
 }
 
 cache_svd <- function(x, k, weight, engine, cache = TRUE, ...) {
 
     x <- quanteda::dfm_weight(x, scheme = weight)
-    hash <- digest::digest(list(as(x, "dgCMatrix"), k,
+    hash <- digest::digest(list(as(x, "dgCMatrix"), k, engine, ...,
                                 utils::packageVersion("LSX")),
                            algo = "xxhash64")
 
@@ -292,7 +295,7 @@ cache_svd <- function(x, k, weight, engine, cache = TRUE, ...) {
 
 cache_glove <- function(x, w, x_max = 10, n_iter = 10, cache = TRUE, ...) {
 
-    hash <- digest::digest(list(as(x, "dgCMatrix"), w, x_max, n_iter,
+    hash <- digest::digest(list(as(x, "dgCMatrix"), w, x_max, n_iter, ...,
                                 utils::packageVersion("LSX")),
                            algo = "xxhash64")
 
@@ -305,8 +308,9 @@ cache_glove <- function(x, w, x_max = 10, n_iter = 10, cache = TRUE, ...) {
         message("Reading cache file: ", file_cache)
         result <- readRDS(file_cache)
     } else {
-        glove <- rsparse::GloVe$new(rank = w, x_max = x_max)
-        result <- t(glove$fit_transform(Matrix::drop0(x), n_iter = n_iter, ...))
+        glove <- rsparse::GloVe$new(rank = w, x_max = x_max, ...)
+        temp <- glove$fit_transform(Matrix::drop0(x), n_iter = n_iter)
+        result <- t(temp)
         result <- result + glove$components
         if (cache) {
             message("Writing cache file: ", file_cache)
@@ -356,7 +360,7 @@ summary.textmodel_lss <- function(object, n = 30L, ...) {
 #' @keywords textmodel internal
 #' @export
 coef.textmodel_lss <- function(object, ...) {
-    object$beta
+    sort(object$beta, decreasing = TRUE)
 }
 
 #' @rdname coef.textmodel_lss
@@ -397,7 +401,6 @@ weight_seeds <- function(seeds, type) {
 #'   unrelated subjects.
 #' @param rescaling if `TRUE`, scores are normalized using `scale()`.
 #' @param ... not used
-#' @keywords internal
 #' @import methods
 #' @importFrom Matrix Matrix rowSums t
 #' @importFrom quanteda is.dfm dfm_select

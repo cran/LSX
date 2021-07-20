@@ -1,4 +1,3 @@
-context("test textmodel_lss")
 
 require(quanteda)
 
@@ -10,6 +9,7 @@ require(quanteda)
 toks_test <- readRDS("../data/tokens_test.RDS")
 feat_test <- head(char_context(toks_test, "america*", min_count = 1, p = 0.05), 100)
 dfmt_test <- dfm(toks_test)
+fcmt_test <- fcm(dfmt_test)
 
 seed <- as.seedwords(data_dictionary_sentiment)
 lss_test <- textmodel_lss(dfmt_test, seed, terms = feat_test, k = 300,
@@ -17,6 +17,7 @@ lss_test <- textmodel_lss(dfmt_test, seed, terms = feat_test, k = 300,
 lss_test_nd <- textmodel_lss(dfmt_test, seed, terms = feat_test, k = 300,
                              include_data = FALSE)
 lss_test_ss <- textmodel_lss(dfmt_test, seed[1], terms = feat_test, k = 300)
+lss_test_fcm <- textmodel_lss(fcmt_test, seed, terms = feat_test, w = 50)
 
 test_that("char_context is working", {
 
@@ -46,9 +47,25 @@ test_that("textmodel_lss has all the attributes", {
     )
 
     expect_true(is.numeric(lss_test$beta))
+    expect_true(is.numeric(lss_test$frequency))
+    expect_identical(names(lss_test$beta), names(lss_test$frequency))
     expect_true(is.dfm(lss_test$data))
     expect_identical(lss_test$terms, feat_test)
     expect_identical(names(lss_test$seeds_weighted), names(seedwords("pos-neg")))
+
+    expect_equal(
+        names(lss_test_fcm),
+        c("data", "beta", "k", "slice", "frequency", "terms", "seeds", "seeds_weighted",
+          "embedding", "similarity", "importance",
+          "concatenator", "dummy", "call")
+    )
+
+    expect_true(is.numeric(lss_test_fcm$beta))
+    expect_true(is.numeric(lss_test_fcm$frequency))
+    expect_identical(names(lss_test_fcm$beta), names(lss_test_fcm$frequency))
+    expect_true(is.null(lss_test_fcm$data))
+    expect_identical(lss_test_fcm$terms, feat_test)
+    expect_identical(names(lss_test_fcm$seeds_weighted), names(seedwords("pos-neg")))
 
     expect_equal(
         names(lss_test_nd),
@@ -129,7 +146,7 @@ test_that("calculation of fit and se.fit are correct", {
     expect_equal(pred$fit[2], c(text2 = 0.10))
     expect_equal(pred$fit[3], c(text3 = 0.1 * (2 / 5) + 0.1 * (1 / 5) + 0.3 * (2 / 5)))
 
-    beta <- coef(lss)
+    beta <- lss$beta
     dfmt_sub <- dfm_select(dfmt, names(beta))
     dfmt_prop <- dfm_weight(dfmt_sub, "prop")
 
@@ -147,9 +164,18 @@ test_that("calculation of fit and se.fit are correct", {
 })
 
 test_that("textmodel_lss works with only with single seed", {
+    skip_on_cran()
     expect_silent(textmodel_lss(dfm(toks_test), seedwords("pos-neg")[1], terms = feat_test, k = 10))
     expect_silent(textmodel_lss(dfm(toks_test), seedwords("pos-neg")[1], terms = character(), k = 10))
     expect_silent(textmodel_lss(dfm(toks_test), seedwords("pos-neg")[1], k = 10))
+})
+
+test_that("textmodel_lss.fcm works with ...", {
+    skip_on_cran()
+    expect_warning(textmodel_lss(fcmt_test, seedwords("pos-neg"),
+                                 terms = feat_test, learning_rate = 0.1), NA)
+    expect_warning(textmodel_lss(fcmt_test, seedwords("pos-neg"),
+                                 terms = feat_test, alpha = 1), NA)
 })
 
 test_that("terms work with glob", {
