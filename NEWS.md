@@ -1,8 +1,14 @@
+# Changes in v1.0.2
+
+* Add the `auto_weight` argument to `textmodel_lss()` and `as.textmodel_lss()` to improve the accuracy of scaling.
+* Remove the `group` argument from `textplot_simil()` to simplify the object.
+* Make `as.seedwords()` to accept multiple indices for `upper` and `lower`.
+
 # Changes in v1.0.0
 
 * Add `max_count` to `textmodel_lss.fcm()` that will be passed to `x_max` in `rsparse::GloVe$new()`.
 * Add `max_words` to `textplot_terms()` to avoid overcrowding.
-* Make `textplot_terms()` work with objects from `textmodel_lss.fcm()`.
+* Make `textplot_terms()` to work with objects from `textmodel_lss.fcm()`.
 * Add `concatenator` to `as.seedwords()`.
 
 # Changes in v0.9.9

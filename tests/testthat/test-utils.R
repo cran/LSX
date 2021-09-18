@@ -40,6 +40,9 @@ test_that("as.seedwords works", {
     lis4 <- list("pos" = c("a", "a"), "neg" = c("b", "b"))
     expect_equal(as.seedwords(lis4, upper = "pos", lower = "neg"),
                  c("a" = 1, "b" = -1))
+    lis5 <- list("pos1" = c("a", "b"), "pos2" = c("c"), "neg" = c("d", "e", "f"))
+    expect_equal(as.seedwords(lis5, upper = c("pos1", "pos2"), lower = "neg"),
+                 c("a" = 1, "b" = 1, "c" = 1, "d" = -1, "e" = -1, "f" = -1))
 
     dict1 <- dictionary(lis3)
     expect_equal(as.seedwords(dict1, upper = "pos", lower = "neg"),
@@ -60,14 +63,4 @@ test_that("cohesion works", {
     expect_identical(nrow(coh), lss_test$k)
 })
 
-test_that("strength works", {
-    lis <- strength(lss_test)
-    expect_identical(names(lis), c("overall", "element"))
-    expect_identical(names(lis$element), c("seed", "selected", "all"))
-    expect_identical(nrow(lis$element), length(unlist(lss_test$seeds_weighted)))
-
-    lss1 <- textmodel_lss(dfmt_test, seed_test, terms = feat_test, k = 300, slice = 100)
-    lss2 <- textmodel_lss(dfmt_test, seed_test, terms = feat_test, k = 300)
-    expect_true(all(strength(lss1)$overall != strength(lss2)$overall))
-})
 
