@@ -1,11 +1,13 @@
 #' A word embeddings-based semisupervised model for document scaling
 #'
 #' @param x a dfm or fcm created by [quanteda::dfm()] or [quanteda::fcm()]
-#' @param seeds a character vector, named numeric vector that contains seed
+#' @param seeds a character vector or named numeric vector that contains seed
 #'   words. If seed words contain "*", they are interpreted as glob patterns.
 #'   See [quanteda::valuetype].
-#' @param terms words weighted as model terms. All the features of
-#'   [quanteda::dfm()] or [quanteda::fcm()] will be used if not specified.
+#' @param terms a character vector or named numeric vector that specify words
+#'   for which polarity scores will be computed; if a numeric vector, words' polarity
+#'   scores will be weighted accordingly; if `NULL`, all the features of
+#'   [quanteda::dfm()] or [quanteda::fcm()] will be used.
 #' @param weight weighting scheme passed to [quanteda::dfm_weight()]. Ignored
 #'   when `engine` is "rsparse".
 #' @param simil_method specifies method to compute similarity between features.
@@ -14,7 +16,7 @@
 #' @param cache if `TRUE`, save result of SVD for next execution with identical
 #'   `x` and settings. Use the `base::options(lss_cache_dir)` to change the
 #'   location cache files to be save.
-#' @param engine select the engine to factorize `x` to get word vectors. Choose
+#' @param engine select the engine to factorize `x` to generate word vectors. Choose
 #'   from [RSpectra::svds()], [irlba::irlba()], [rsvd::rsvd()], and
 #'   [rsparse::GloVe()].
 #' @param auto_weight automatically determine weights to approximate the
@@ -64,21 +66,31 @@
 #' seed <- as.seedwords(data_dictionary_sentiment)
 #'
 #' # SVD
-#' lss_svd <- textmodel_lss(dfmt, seed)
-#' summary(lss_svd)
+#' lss_svd <- textmodel_lss(dfmt, seed, include_data = TRUE)
+#' head(coef(lss_svd), 20)
+#' head(predict(lss_svd))
+#' head(predict(lss_svd, min_n = 10)) # more robust
+#'
+#' dfmt_grp <- dfm_group(dfmt) # group sentences
 #'
 #' # sentiment model on economy
-#' eco <- head(char_keyness(toks, 'econom*'), 500)
-#' svd_eco <- textmodel_lss(dfmt, seed, terms = eco)
+#' eco <- head(textstat_context(toks, 'econom*'), 500)
+#' lss_svd_eco <- textmodel_lss(dfmt, seed, terms = eco)
+#' head(predict(lss_svd_eco, newdata = dfmt_grp))
 #'
 #' # sentiment model on politics
-#' pol <- head(char_keyness(toks, 'politi*'), 500)
-#' svd_pol <- textmodel_lss(dfmt, seed, terms = pol)
+#' pol <- head(textstat_context(toks, 'politi*'), 500)
+#' lss_svd_pol <- textmodel_lss(dfmt, seed, terms = pol)
+#' head(predict(lss_svd_pol, newdata = dfmt_grp))
+#'
+#' # modify hyper-parameters of existing model
+#' lss_svd_pol2 <- as.textmodel_lss(lss_svd_pol, seed[c(1, 8)], terms = pol, slice = 200)
+#' head(predict(lss_svd_pol2, newdata = dfmt_grp))
 #'
 #' # GloVe
-#' fcmt  <- fcm(toks, context = "window", count = "weighted", weights = 1 / (1:5), tri = TRUE)
+#' fcmt  <- fcm(toks, context = "window", count = "weighted", weights = 1 / 1:5, tri = TRUE)
 #' lss_glov <- textmodel_lss(fcmt, seed)
-#' summary(lss_glov)
+#' head(predict(lss_glov, newdata = dfmt_grp))
 #' }
 #'
 #' @export
@@ -90,11 +102,12 @@ textmodel_lss <- function(x, ...) {
 #' @param k the number of singular values requested to the SVD engine. Only used
 #'   when `x` is a `dfm`.
 #' @param slice a number or indices of the components of word vectors used to
-#'   compute similarity; `slice < k` to truncate word vectors; useful for diagnosys
-#'   and simulation.
+#'   compute similarity; `slice < k` to further truncate word vectors; useful
+#'   for diagnosys and simulation.
 #' @param include_data if `TRUE`, fitted model include the dfm supplied as `x`.
 #' @method textmodel_lss dfm
-#' @importFrom quanteda featnames meta colSums
+#' @importFrom quanteda featnames meta check_integer
+#' @importFrom Matrix colSums
 #' @export
 textmodel_lss.dfm <- function(x, seeds, terms = NULL, k = 300, slice = NULL,
                               weight = "count", cache = FALSE,
@@ -107,14 +120,15 @@ textmodel_lss.dfm <- function(x, seeds, terms = NULL, k = 300, slice = NULL,
     args <- list(terms = terms, seeds = seeds, ...)
     if ("features" %in% names(args)) {
         .Deprecated(msg = "'features' is deprecated; use 'terms'\n")
-        terms <- args$features
+        terms <- args$terms <- args$features
     }
 
+    k <- check_integer(k, min_len = 1, max_len = 1, min = 2, max = nrow(x))
     engine <- match.arg(engine)
     seeds <- expand_seeds(seeds, featnames(x), verbose)
     seed <- unlist(unname(seeds))
-    term <- expand_terms(terms, featnames(x))
-    feat <- union(term, names(seed))
+    theta <- get_theta(terms, featnames(x))
+    feat <- union(names(theta), names(seed))
 
     if (engine %in% c("RSpectra", "irlba", "rsvd")) {
         if (verbose)
@@ -125,20 +139,19 @@ textmodel_lss.dfm <- function(x, seeds, terms = NULL, k = 300, slice = NULL,
         embed <- embed[,feat, drop = FALSE]
         import <- svd$d
     }
-    if (is.null(slice))
-        slice <- k
 
-    k <- as.integer(k)
-    slice <- as.integer(slice)
-    if (any(slice < 1L) || any(k < slice))
-        stop("'slice' must be between 1 and k")
+    if (is.null(slice)) {
+        slice <- k
+    } else {
+        slice <- check_integer(slice, min_len = 1, max_len = k, min = 1, max = k)
+    }
     if (length(slice) == 1)
         slice <- seq_len(slice)
 
-    simil <- get_simil(embed, names(seed), term, slice, simil_method)
+    simil <- get_simil(embed, names(seed), names(theta), slice, simil_method)
     if (auto_weight)
         seed <- optimize_weight(seed, simil, verbose, ...)
-    beta <- get_beta(simil, seed)
+    beta <- get_beta(simil, seed) * theta
 
     result <- build_lss(
         beta = beta,
@@ -179,7 +192,7 @@ textmodel_lss.fcm <- function(x, seeds, terms = NULL, w = 50,
     args <- list(terms = terms, seeds = seeds, ...)
     if ("features" %in% names(args)) {
         .Deprecated(msg = "'features' is deprecated; use 'terms'.\n")
-        terms <- args$features
+        terms <- args$terms <- args$features
     }
     if (engine == "text2vec") {
         .Deprecated(msg = "GloVe engine has been moved to from text2vec to rsparse.\n")
@@ -194,7 +207,9 @@ textmodel_lss.fcm <- function(x, seeds, terms = NULL, w = 50,
     if (engine == "rsparse") {
         if (verbose)
             cat("Fitting GloVe model by rsparse...\n")
-        embed <- cache_glove(x, w, x_max = max_count, cache = cache, ...)
+        embed <- (function(x, w, max_count, cache, features, ...) {
+            cache_glove(x, w, x_max = max_count, cache = cache, ...)
+        })(x, w, max_count, cache, ...) # trap old argument
         embed <- embed[,feat, drop = FALSE]
     }
 
@@ -284,6 +299,21 @@ get_beta <- function(simil, seed) {
     Matrix::rowMeans(simil$terms %*% seed)
 }
 
+get_theta <- function(terms, feature) {
+    if (is.numeric(terms)) {
+        if (is.null(names(terms)))
+            stop("terms must be named", call. = FALSE)
+        if (any(terms < 0) || any(is.na(terms)))
+            stop("terms must be positive values without NA", call. = FALSE)
+        theta <- terms
+    } else {
+        terms <- expand_terms(terms, feature)
+        theta <- rep(1.0, length(terms))
+        names(theta) <- terms
+    }
+    return(theta)
+}
+
 cache_svd <- function(x, k, weight, engine, cache = TRUE, ...) {
 
     x <- quanteda::dfm_weight(x, scheme = weight)
@@ -371,10 +401,10 @@ get_seeds <- function(seeds) {
 summary.textmodel_lss <- function(object, n = 30L, ...) {
     result <- list(
         "call" = object$call,
-        "seeds" = unlist(unname(object$seeds)),
+        "seeds" = object$seeds,
         "beta" = as.coefficients_textmodel(head(coef(object), n))
     )
-    if (!any("data" == names(object)))
+    if (!is.null(object$data))
         result$data.dimension <- dim(object$data)
     as.summary.textmodel(result)
 }
@@ -383,9 +413,8 @@ summary.textmodel_lss <- function(object, n = 30L, ...) {
 #'
 #' `coef()` extract model coefficients from a fitted `textmodel_lss`
 #' object.  `coefficients()` is an alias.
-#' @param object a fitted [textmodel_lss] object
-#' @param ... unused
-#' @keywords textmodel internal
+#' @param object a fitted [textmodel_lss] object.
+#' @param ... not used.
 #' @export
 coef.textmodel_lss <- function(object, ...) {
     sort(object$beta, decreasing = TRUE)
@@ -416,74 +445,6 @@ weight_seeds <- function(seeds, type) {
               names(v) <- y
               return(v)
            }, seeds, seeds_fix, SIMPLIFY = FALSE)
-}
-
-#' Prediction method for textmodel_lss
-#'
-#' @method predict textmodel_lss
-#' @param object a fitted LSS textmodel
-#' @param newdata dfm on which prediction should be made
-#' @param se.fit if `TRUE`, it returns standard error of document scores.
-#' @param density if `TRUE`, returns frequency of model terms in documents.
-#'   Density distribution of model terms can be used to remove documents about
-#'   unrelated subjects.
-#' @param rescaling if `TRUE`, scores are normalized using `scale()`.
-#' @param ... not used
-#' @import methods
-#' @importFrom Matrix Matrix rowSums t
-#' @importFrom quanteda is.dfm dfm_select
-#' @export
-predict.textmodel_lss <- function(object, newdata = NULL, se.fit = FALSE,
-                                  density = FALSE, rescaling = TRUE, ...){
-
-    beta <- Matrix(object$beta, nrow = 1, sparse = TRUE,
-                   dimnames = list(NULL, names(object$beta)))
-
-    if (is.null(newdata)) {
-        if (is.null(object$data))
-            stop("LSS model includes no data, please supply a dfm using newdata.\n")
-        data <- object$data
-    } else {
-        if (!is.dfm(newdata))
-            stop("newdata must be a dfm\n", call. = FALSE)
-        data <- newdata
-    }
-
-    if (density)
-        den <- unname(rowSums(dfm_select(data, object$terms)) / rowSums(data))
-
-    data <- dfm_match(data, colnames(beta))
-    n <- unname(rowSums(data))
-    # mean scores of documents excluding zeros
-    fit <- ifelse(n > 0, rowSums(data %*% t(beta)) / n, NA)
-    names(fit) <- rownames(data)
-
-    if (rescaling) {
-        fit_scaled <- scale(fit)
-        result <- list(fit = rowSums(fit_scaled))
-    } else {
-        result <- list(fit = fit)
-    }
-
-    if (se.fit) {
-        # sparse variance computation
-        weight <- t(t(data > 0) * colSums(beta))
-        var <- (rowSums(weight ^ 2 * data) / n) - (rowSums(weight * data) / n) ^ 2
-        var <- zapsmall(var)
-        se <- ifelse(n > 1, unname(sqrt(var) / sqrt(n)), NA)
-        if (rescaling)
-            se <- se / attr(fit_scaled, "scaled:scale")
-        result$se.fit <- se
-        result$n <- n
-    }
-    if (density)
-        result$density <- den
-
-    if (!se.fit && !density) {
-        return(result$fit)
-    } else {
-        return(result)
-    }
 }
 
 # automatically align polarity score with original weight

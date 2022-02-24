@@ -1,4 +1,3 @@
-
 require(quanteda)
 
 # create and save test object
@@ -83,26 +82,16 @@ test_that("summary.textmodel_lss is working", {
 
 })
 
-test_that("textmodel_lss print progress", {
-    skip_on_cran()
-
-    expect_output(
-        textmodel_lss(dfmt_test, seed, verbose = TRUE),
-        paste0("Calculating term-term similarity to 12 seed words...\n",
-               "Performing SVD by RSpectra...", collapse = ""),
-        fixed = TRUE
-    )
-
-    expect_output(
-        textmodel_lss(fcmt_test, seed, verbose = TRUE),
-        paste0("Calculating term-term similarity to 12 seed words...\n",
-               "Fitting GloVe model by rsparse...", collapse = ""),
-        fixed = TRUE
-    )
-
-})
-
 test_that("predict.textmodel_lss is working", {
+
+    expect_warning(predict(lss_test, xxx = TRUE),
+                   "xxx argument is not used")
+    expect_warning(predict(lss_test, se.fit = TRUE),
+                   "'se.fit' is deprecated; use 'se_fit'")
+    expect_error(predict(lss_test, newdata = matrix(1:10)),
+                 "newdata must be a dfm")
+    expect_error(predict(lss_test_nd),
+                 "The model includes no data, use newdata to supply a dfm.")
 
     pred1 <- predict(lss_test)
     expect_equal(length(pred1), ndoc(dfmt_test))
@@ -111,7 +100,7 @@ test_that("predict.textmodel_lss is working", {
     expect_equal(mean(pred1, na.rm = TRUE), 0)
     expect_equal(sd(pred1, na.rm = TRUE), 1)
 
-    pred2 <- predict(lss_test, se.fit = TRUE)
+    pred2 <- predict(lss_test, se_fit = TRUE)
     expect_equal(length(pred2$fit), ndoc(dfmt_test))
     expect_identical(names(pred2$fit), docnames(dfmt_test))
     expect_equal(length(pred2$se.fit), ndoc(dfmt_test))
@@ -127,8 +116,13 @@ test_that("predict.textmodel_lss is working", {
     expect_identical(names(pred4), docnames(toks_test))
     expect_equal(as.numeric(scale(pred4)), unname(pred1))
 
-    pred5 <- predict(lss_test, se.fit = TRUE, density = TRUE)
+    pred5 <- predict(lss_test, se_fit = TRUE, density = TRUE)
     expect_equal(names(pred5), c("fit", "se.fit", "n", "density"))
+
+    pred6 <- predict(lss_test, rescaling = FALSE, min_n = 2)
+    expect_true(all(is.na(pred4) == is.na(pred6)))
+    expect_true(all(abs(pred6[pred5$n == 1]) < abs(pred4[pred5$n == 1]), na.rm = TRUE))
+    expect_true(all(abs(pred6[pred5$n >= 2]) == abs(pred4[pred5$n >= 2]), na.rm = TRUE))
 
 })
 
@@ -154,12 +148,12 @@ test_that("data object is valid", {
     expect_equal(class(sum), c("summary.textmodel", "list"))
 })
 
-test_that("calculation of fit and se.fit are correct", {
+test_that("calculation of fit and se_fit are correct", {
 
     lss <- as.textmodel_lss(c("a" = 0.1, "b" = 0.1, "c" = 0.3))
     toks <- tokens(c("a a a", "a b", "a a b c c d e"))
     dfmt <- dfm(toks)
-    pred <- predict(lss, newdata = dfmt, se.fit = TRUE, rescaling = FALSE)
+    pred <- predict(lss, newdata = dfmt, se_fit = TRUE, rescaling = FALSE)
 
     expect_equal(pred$fit[1], c(text1 = 0.10))
     expect_equal(pred$fit[2], c(text2 = 0.10))
@@ -197,7 +191,28 @@ test_that("textmodel_lss.fcm works with ...", {
                                  terms = feat_test, alpha = 1), NA)
 })
 
-test_that("terms work with glob", {
+test_that("terms is working", {
+    skip_on_cran()
+
+    # glob pattern
+    lss1 <- textmodel_lss(dfmt_test, seed, terms = "poli*", k = 300)
+    expect_true(all(stringi::stri_startswith_fixed(names(lss1$beta), "poli")))
+
+    # numeric vector
+    weight <- sample(1:10, length(lss1$beta), replace = TRUE) / 10
+    names(weight) <- names(lss1$beta)
+    lss2 <- textmodel_lss(dfmt_test, seed, terms = weight, k = 300)
+    expect_true(all(lss2$beta == lss1$beta * weight))
+    expect_error(textmodel_lss(dfmt_test, seed, terms = c("polity" = 0.2, "politic" = -0.1), k = 300),
+                 "terms must be positive values without NA")
+    expect_error(textmodel_lss(dfmt_test, seed, terms = c("polity" = 0.2, "politic" = NA), k = 300),
+                 "terms must be positive values without NA")
+    expect_error(textmodel_lss(dfmt_test, seed, terms = c(01, 0.2), k = 300),
+                 "terms must be named")
+
+})
+
+test_that("terms work with numeric vector", {
     lss <- textmodel_lss(dfmt_test, seed, terms = "poli*", k = 300)
     expect_true(all(stringi::stri_startswith_fixed(names(coef(lss)), "poli")))
 })
@@ -219,7 +234,7 @@ test_that("include_data is working", {
     dfmt <- dfm_group(dfm(toks_test))
     lss <- textmodel_lss(dfmt, seedwords("pos-neg"), include_data = TRUE, k = 10)
     lss_nd <- textmodel_lss(dfmt, seedwords("pos-neg"), include_data = FALSE, k = 10)
-    expect_error(predict(lss_nd), "LSS model includes no data")
+    expect_error(predict(lss_nd), "The model includes no data")
     expect_identical(predict(lss), predict(lss_nd, newdata = dfmt))
 })
 
@@ -233,11 +248,17 @@ test_that("predict.textmodel_lss computes scores correctly", {
     expect_equal(is.na(pred[c("1789-Washington", "1797-Adams", "1825-Adams")]),
                  c("1789-Washington" = FALSE, "1797-Adams" = TRUE, "1825-Adams" = TRUE))
 
-    pred2 <- predict(lss_test, newdata = dfmt, se.fit = TRUE)
+    pred2 <- predict(lss_test, newdata = dfmt, se_fit = TRUE)
     expect_equal(is.na(pred2$fit[c("1789-Washington", "1797-Adams", "1825-Adams")]),
                  c("1789-Washington" = FALSE, "1797-Adams" = TRUE, "1825-Adams" = TRUE))
     expect_equal(is.na(pred2$se.fit[c(1, 3, 10)]), c(FALSE, TRUE, TRUE))
     expect_equal(pred2$n[c(1, 3, 10)] == 0, c(FALSE, TRUE, TRUE))
+
+    pred3 <- predict(lss_test, newdata = dfmt, se_fit = TRUE, min_n = 2)
+    expect_equal(is.na(pred3$fit[c("1789-Washington", "1797-Adams", "1825-Adams")]),
+                 c("1789-Washington" = FALSE, "1797-Adams" = TRUE, "1825-Adams" = TRUE))
+    expect_equal(is.na(pred3$se.fit[c(1, 3, 10)]), c(FALSE, TRUE, TRUE))
+    expect_equal(pred3$n[c(1, 3, 10)] == 0, c(FALSE, TRUE, TRUE))
 
     load("../data/prediction_v0.99.RDA")
     expect_equal(pred, pred_v099, tolerance = 0.0001)
@@ -251,11 +272,9 @@ test_that("textmodel_lss works with glob patterns", {
     dfmt <- dfm(toks_test)
     seed <- c("nice*" = 1, "positive*" = 1, "bad*" = -1, "negative*" = -1)
     lss <- textmodel_lss(dfmt, seed, k = 10)
-    expect_equal(names(lss$seeds), names(seed))
-    expect_equal(lss$seeds_weighted,
-                 c("positive" = 0.25, "positively" = 0.25,
-                   "badge" = -0.16, "bad" = -0.16, "badly" = -0.16,
-                   "negative" = -0.5), tolerance = 0.01)
+    expect_equal(lss$seeds, seed)
+    expect_equal(names(lss$seeds_weighted),
+                 c("positive", "positively", "badge", "bad", "badly", "negative"))
 })
 
 test_that("textmodel_lss works with non-existent seeds", {
@@ -284,7 +303,7 @@ test_that("text2vec works", {
     )
     expect_error(
         predict(lss),
-        "LSS model includes no data"
+        "The model includes no data"
     )
     expect_true(setequal(names(coef(lss)), colnames(fcmt)))
 })
@@ -309,7 +328,7 @@ test_that("slice argument is working", {
     )
     expect_error(
         textmodel_lss(dfmt_test, seed, terms = feat_test, k = 300, slice = 1:400),
-        "'slice' must be between 1 and k"
+        "The length of slice must be between 1 and 300"
     )
 })
 
@@ -343,10 +362,6 @@ test_that("test smooth_lss", {
     dat_locfit <- smooth_lss(dat, lss_var = "lss", date_var = "time",
                              engine = "locfit")
     expect_true(cor(dat_loess$fit, dat_locfit$fit) > 0.90)
-})
-
-test_that("works with single seed", {
-    expect_silent(cohesion(lss_test))
 })
 
 test_that("weight_seeds() works", {
@@ -384,31 +399,25 @@ test_that("weight_seeds() works", {
     )
 })
 
-test_that("auto_weight is working", {
-
+test_that("old argument still works", {
     skip_on_cran()
-    lss1 <- textmodel_lss(dfmt_test, seed, k = 300)
-    lss2 <- textmodel_lss(dfmt_test, seed, k = 300, auto_weight = TRUE)
-    expect_true(
-        all(lss1$seeds_weighted != lss2$seeds_weighted)
-    )
-    expect_true(
-        all(sign(lss1$seeds_weighted) == sign(lss2$seeds_weighted))
-    )
-    expect_true(
-        all(abs(lss2$beta[names(lss2$seeds_weighted)] - lss1$seeds_weighted) < 0.05)
-    )
+    suppressWarnings({
+        lss <- textmodel_lss(dfmt_test, seed, features = feat_test, k = 300)
+    })
+    expect_equal(lss_test$terms, lss$terms)
 
-    lss3 <- textmodel_lss(fcmt_test, seed, w = 50)
-    lss4 <- textmodel_lss(fcmt_test, seed, w = 50, auto_weight = TRUE)
-    expect_true(
-        all(lss3$seeds_weighted != lss4$seeds_weighted)
-    )
-    expect_true(
-        all(sign(lss3$seeds_weighted) == sign(lss4$seeds_weighted))
-    )
-    expect_true(
-        all(abs(lss4$beta[names(lss4$seeds_weighted)] - lss3$seeds_weighted) < 0.05)
-    )
+    suppressWarnings({
+        lss_fcm <- textmodel_lss(fcmt_test, seed, features = feat_test, w = 50)
+    })
+    expect_equal(lss_test$terms, lss_fcm$terms)
 })
 
+test_that("se_fit is working", {
+    beta <- c(a = 0.2, b = 0.1, z = 0)
+    lss <- as.textmodel_lss(beta)
+    dfmt1 <- dfm(tokens(c("a a a b b", "")))
+    dfmt2 <- dfm(tokens(c("a a a b b z z z z z", "")))
+    pred1 <- predict(lss, newdata = dfmt1, rescaling = FALSE, min_n = 10, se_fit = TRUE)
+    pred2 <- predict(lss, newdata = dfmt2, rescaling = FALSE, se_fit = TRUE)
+    expect_identical(pred1, pred2)
+})

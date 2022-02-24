@@ -44,19 +44,21 @@ textmodel_lss(x, ...)
 
 \item{...}{additional arguments passed to the underlying engine.}
 
-\item{seeds}{a character vector, named numeric vector that contains seed
+\item{seeds}{a character vector or named numeric vector that contains seed
 words. If seed words contain "*", they are interpreted as glob patterns.
 See \link[quanteda:valuetype]{quanteda::valuetype}.}
 
-\item{terms}{words weighted as model terms. All the features of
-\code{\link[quanteda:dfm]{quanteda::dfm()}} or \code{\link[quanteda:fcm]{quanteda::fcm()}} will be used if not specified.}
+\item{terms}{a character vector or named numeric vector that specify words
+for which polarity scores will be computed; if a numeric vector, words' polarity
+scores will be weighted accordingly; if \code{NULL}, all the features of
+\code{\link[quanteda:dfm]{quanteda::dfm()}} or \code{\link[quanteda:fcm]{quanteda::fcm()}} will be used.}
 
 \item{k}{the number of singular values requested to the SVD engine. Only used
 when \code{x} is a \code{dfm}.}
 
 \item{slice}{a number or indices of the components of word vectors used to
-compute similarity; \code{slice < k} to truncate word vectors; useful for diagnosys
-and simulation.}
+compute similarity; \code{slice < k} to further truncate word vectors; useful
+for diagnosys and simulation.}
 
 \item{weight}{weighting scheme passed to \code{\link[quanteda:dfm_weight]{quanteda::dfm_weight()}}. Ignored
 when \code{engine} is "rsparse".}
@@ -69,7 +71,7 @@ location cache files to be save.}
 The value is passed to \code{\link[quanteda.textstats:textstat_simil]{quanteda.textstats::textstat_simil()}}, "cosine" is
 used otherwise.}
 
-\item{engine}{select the engine to factorize \code{x} to get word vectors. Choose
+\item{engine}{select the engine to factorize \code{x} to generate word vectors. Choose
 from \code{\link[RSpectra:svds]{RSpectra::svds()}}, \code{\link[irlba:irlba]{irlba::irlba()}}, \code{\link[rsvd:rsvd]{rsvd::rsvd()}}, and
 \code{\link[rsparse:GloVe]{rsparse::GloVe()}}.}
 
@@ -126,21 +128,31 @@ dfmt <- dfm(toks) \%>\%
 seed <- as.seedwords(data_dictionary_sentiment)
 
 # SVD
-lss_svd <- textmodel_lss(dfmt, seed)
-summary(lss_svd)
+lss_svd <- textmodel_lss(dfmt, seed, include_data = TRUE)
+head(coef(lss_svd), 20)
+head(predict(lss_svd))
+head(predict(lss_svd, min_n = 10)) # more robust
+
+dfmt_grp <- dfm_group(dfmt) # group sentences
 
 # sentiment model on economy
-eco <- head(char_keyness(toks, 'econom*'), 500)
-svd_eco <- textmodel_lss(dfmt, seed, terms = eco)
+eco <- head(textstat_context(toks, 'econom*'), 500)
+lss_svd_eco <- textmodel_lss(dfmt, seed, terms = eco)
+head(predict(lss_svd_eco, newdata = dfmt_grp))
 
 # sentiment model on politics
-pol <- head(char_keyness(toks, 'politi*'), 500)
-svd_pol <- textmodel_lss(dfmt, seed, terms = pol)
+pol <- head(textstat_context(toks, 'politi*'), 500)
+lss_svd_pol <- textmodel_lss(dfmt, seed, terms = pol)
+head(predict(lss_svd_pol, newdata = dfmt_grp))
+
+# modify hyper-parameters of existing model
+lss_svd_pol2 <- as.textmodel_lss(lss_svd_pol, seed[c(1, 8)], terms = pol, slice = 200)
+head(predict(lss_svd_pol2, newdata = dfmt_grp))
 
 # GloVe
-fcmt  <- fcm(toks, context = "window", count = "weighted", weights = 1 / (1:5), tri = TRUE)
+fcmt  <- fcm(toks, context = "window", count = "weighted", weights = 1 / 1:5, tri = TRUE)
 lss_glov <- textmodel_lss(fcmt, seed)
-summary(lss_glov)
+head(predict(lss_glov, newdata = dfmt_grp))
 }
 
 }
