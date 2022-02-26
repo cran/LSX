@@ -1,15 +1,15 @@
-c71594fe9f03320768a2529f3b8d832a *DESCRIPTION
+0434df9b5908baae4250d68649b0c2f8 *DESCRIPTION
 6cdd3079602e27790887026489406f3b *NAMESPACE
 4b28d2d1a42e42e7d1932a100943f716 *NEWS.md
 24393c5c02ff1e64090d1463ec67ed9f *R/as.textmodel.R
 56947bd5f5e21f974b953d3f08bb3bd7 *R/data.R
 a579686c394bb944ece103b60448ed12 *R/predict.R
 a44034498fb58090b34a24639895f5ce *R/textmodel-methods.R
-94b5bd47f8cd1b1420f6c1ab49868976 *R/textmodel.R
+374f9d9dcaf4be9372bbeb267cb3cfe7 *R/textmodel.R
 540516813ebcaa357249335cdffa3820 *R/textplot.R
 56cab4564a4419d5824c296487f4505c *R/textstat.R
 be46e10398a02c1032488c8be87aa09b *R/utils.R
-1b74636bdb62d9b78732867edde7750e *build/partial.rdb
+dc68b2f25b25cd052df70521d4ce8436 *build/partial.rdb
 eaa54e3731554da0106579b66f62b5d6 *data/data_dictionary_ideology.RData
 96ab696e8e0eb65ea03db727c31fbf53 *data/data_dictionary_sentiment.RData
 fb9853476c98b1a320265ca419c23e90 *data/data_textmodel_lss_russianprotests.rda
@@ -30,7 +30,7 @@ cbbf924dddca208c001b174ba66d2427 *man/predict.textmodel_lss.Rd
 ca56e6576c05141d76549c61446e505d *man/print.summary.textmodel.Rd
 a1eb609b370f404e8ab3d582ac03c9e4 *man/seedwords.Rd
 c4703c331535524d0455fc2e9bd072a2 *man/smooth_lss.Rd
-b225779ab19323cd61534144870f04a5 *man/textmodel_lss.Rd
+cca0cf34b6d2573ac26725e50ebc51e0 *man/textmodel_lss.Rd
 650f34528221420d0f3455b359c918aa *man/textplot_components.Rd
 d8a3cefdc527e35dcdf038b163629163 *man/textplot_simil.Rd
 d486c899df07d0f387c05e5688c5f3ed *man/textplot_terms.Rd
