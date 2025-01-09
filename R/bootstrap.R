@@ -14,7 +14,7 @@
 #' @param ... additional arguments passed to [as.textmodel_lss()] and
 #'   [predict()].
 #' @param verbose show messages if `TRUE`.
-#' @details This function internally creates LSS fitted textmodel_lss objects by
+#' @details `bootstrap_lss()` creates LSS fitted textmodel_lss objects internally by
 #'   resampling hyper-parameters and computes polarity of words or documents.
 #'   The resulting matrix can be used to asses the validity and the reliability
 #'   of seeds or k.
@@ -26,7 +26,7 @@
 bootstrap_lss <- function(x, what = c("seeds", "k"),
                           mode = c("terms", "coef", "predict"),
                           remove = FALSE,
-                          from = 50, to = NULL, by = 50, verbose = FALSE, ...) {
+                          from = 100, to = NULL, by = 50, verbose = FALSE, ...) {
 
     what <- match.arg(what)
     mode <- match.arg(mode)
@@ -37,9 +37,9 @@ bootstrap_lss <- function(x, what = c("seeds", "k"),
     } else {
         to <- x$k
     }
-    by <- check_integer(by, min = 1, max = x$k - 50)
+    by <- check_integer(by, min = 1, max = x$k)
     if (verbose)
-        cat(sprintf("Fitting textmodel_lss with a different hyper-parameter...\n"))
+        cat(sprintf("Call %s(x) with different hyper-parameters...\n", mode))
     if (what == "seeds") {
         param <- names(x$seeds_weighted)
         beta <- lapply(param, function(y) {
@@ -67,7 +67,9 @@ bootstrap_lss <- function(x, what = c("seeds", "k"),
         result <- sapply(beta, function(y) names(sort(y, decreasing = TRUE)))
     } else if (mode == "predict") {
         result <- sapply(beta, function(x) {
-            predict(as.textmodel_lss(x), se_fit = FALSE, ...)
+            suppressWarnings({
+                predict(as.textmodel_lss(x), ..., se_fit = FALSE, density = FALSE)
+            })
         })
     } else {
         result <- do.call(cbind, beta)
@@ -76,4 +78,36 @@ bootstrap_lss <- function(x, what = c("seeds", "k"),
     attr(result, "what") <- what
     attr(result, "values") <- param
     return(result)
+}
+
+
+#' \[experimental\] Compute variance ratios with different hyper-parameters
+#' @param x a fitted textmodel_lss object.
+#' @param ... additional arguments passed to [bootstrap_lss].
+#' @export
+#' @details `optimize_lss()` computes variance ratios with different values of
+#'   hyper-parameters using [bootstrap_lss]. The variance ration \eqn{v} is defined
+#'   as \deqn{v = \sigma^2_{documents} / \sigma^2_{words}.} It maximizes
+#'   when the model best distinguishes between the documents on the latent scale.
+#' @examples
+#' \dontrun{
+#' # the unit of analysis is not sentences
+#' dfmt_grp <- dfm_group(dfmt)
+#'
+#' # choose best k
+#' v1 <- optimize_lss(lss, what = "k", from = 50,
+#'                    newdata = dfmt_grp, verbose = TRUE)
+#' plot(names(v1), v1)
+#'
+#' # find bad seed words
+#' v2 <- optimize_lss(lss, what = "seeds", remove = TRUE,
+#'                    newdata = dfmt_grp, verbose = TRUE)
+#' barplot(v2, las = 2)
+#' }
+#'
+optimize_lss <- function(x, ...) {
+    beta <- bootstrap_lss(x, mode = "coef", ...)
+    pred <- bootstrap_lss(x, mode = "pred", ..., rescale = FALSE)
+    disc <- apply(pred, 2, var, na.rm = TRUE) / apply(beta, 2, var, na.rm = TRUE)
+    return(disc)
 }

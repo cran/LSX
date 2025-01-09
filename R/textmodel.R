@@ -112,7 +112,7 @@ textmodel_lss.dfm <- function(x, seeds, terms = NULL, k = 300, slice = NULL,
 
     simil <- get_simil(embed, names(seed), names(theta), slice, simil_method)
     if (auto_weight)
-        seed <- optimize_weight(seed, simil, verbose, ...)
+        seed <- optimize_weight(seed, simil, verbose)
     beta <- get_beta(simil, seed) * theta
 
     result <- build_lss(
@@ -126,7 +126,7 @@ textmodel_lss.dfm <- function(x, seeds, terms = NULL, k = 300, slice = NULL,
         embedding = embed,
         similarity = simil$seed,
         concatenator = meta(x, field = "concatenator", type = "object"),
-        call = match.call(sys.function(-1), call = sys.call(-1)),
+        call = try(match.call(sys.function(-1), call = sys.call(-1)), silent = TRUE),
         version = utils::packageVersion("LSX")
     )
     if (include_data) {
@@ -185,7 +185,7 @@ textmodel_lss.fcm <- function(x, seeds, terms = NULL, w = 50,
 
     simil <- get_simil(embed, names(seed), term, seq_len(w), simil_method)
     if (auto_weight)
-        seed <- optimize_weight(seed, simil, verbose, ...)
+        seed <- optimize_weight(seed, simil, verbose)
     beta <- get_beta(simil, seed)
 
     result <- build_lss(
@@ -198,7 +198,7 @@ textmodel_lss.fcm <- function(x, seeds, terms = NULL, w = 50,
         embedding = embed,
         similarity = simil$seed,
         concatenator = meta(x, field = "concatenator", type = "object"),
-        call = match.call(sys.function(-1), call = sys.call(-1)),
+        call = try(match.call(sys.function(-1), call = sys.call(-1)), silent = TRUE),
         version = utils::packageVersion("LSX")
     )
     class(result) <- "textmodel_lss"
@@ -307,12 +307,16 @@ cache_svd <- function(x, k, weight, engine, cache = TRUE, ...) {
         message("Reading cache file: ", file_cache)
         result <- readRDS(file_cache)
     } else {
-        if (engine == "RSpectra") {
-            result <- RSpectra::svds(as(x, "dgCMatrix"), k = k, nu = 0, nv = k, ...)
-        } else if (engine == "rsvd") {
+        if (engine == "rsvd") {
+            if (!requireNamespace("rsvd"))
+                stop("wordvector package must be installed")
             result <- rsvd::rsvd(as(x, "dgCMatrix"), k = k, nu = 0, nv = k, ...)
-        } else {
+        } else if (engine == "irlba") {
+            if (!requireNamespace("irlba"))
+                stop("irlba package must be installed")
             result <- irlba::irlba(as(x, "dgCMatrix"), nv = k, right_only = TRUE, ...)
+        } else {
+            result <- RSpectra::svds(as(x, "dgCMatrix"), k = k, nu = 0, nv = k, ...)
         }
         if (cache) {
             message("Writing cache file: ", file_cache)
@@ -337,6 +341,8 @@ cache_glove <- function(x, w, x_max = 10, n_iter = 10, cache = TRUE, ...) {
         message("Reading cache file: ", file_cache)
         result <- readRDS(file_cache)
     } else {
+        if (!requireNamespace("rsparse"))
+            stop("wordvector package must be installed")
         glove <- rsparse::GloVe$new(rank = w, x_max = x_max, ...)
         temp <- glove$fit_transform(Matrix::drop0(x), n_iter = n_iter,
                                     n_threads = getOption("quanteda_threads", 1L))
@@ -420,12 +426,12 @@ weight_seeds <- function(seeds, type) {
 }
 
 # automatically align polarity score with original weight
-optimize_weight <- function(seed, simil, verbose, ...) {
+optimize_weight <- function(seed, simil, verbose) {
     if (verbose)
         cat("Optimizing seed weights...\n")
     result <- optim(seed, function(x) {
         sum((rowSums(simil$seeds %*% x) - seed) ^ 2)
-    }, ...)
+    })
     return(result$par)
 }
 

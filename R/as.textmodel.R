@@ -51,7 +51,7 @@ as.textmodel_lss.matrix <- function(x, seeds,
 
     simil <- get_simil(x, names(seed), names(theta), slice, simil_method)
     if (auto_weight)
-        seed <- optimize_weight(seed, simil, verbose, ...)
+        seed <- optimize_weight(seed, simil, verbose)
     beta <- get_beta(simil, seed) * theta
 
     result <- build_lss(
@@ -63,7 +63,8 @@ as.textmodel_lss.matrix <- function(x, seeds,
         seeds_weighted = seed,
         embedding = x,
         similarity = simil$seed,
-        call = match.call()
+        call = try(match.call(sys.function(-1), call = sys.call(-1)), silent = TRUE),
+        version = utils::packageVersion("LSX")
     )
     return(result)
 }
@@ -82,7 +83,7 @@ as.textmodel_lss.numeric <- function(x, ...) {
     result <- build_lss(
         beta = x,
         terms = names(x),
-        call = match.call()
+        call = try(match.call(sys.function(-1), call = sys.call(-1)), silent = TRUE)
     )
     return(result)
 }
@@ -93,7 +94,24 @@ as.textmodel_lss.textmodel_lss <- function(x, ...) {
     if (is.null(x$embedding))
         stop("x must be a valid textmodel_lss object")
     result <- as.textmodel_lss(x$embedding, ...)
+    result$concatenator <- x$concatenator
     result$data <- x$data
     result$frequency <- x$frequency[names(result$beta)]
     return(result)
+}
+
+#' @export
+#' @method as.textmodel_lss textmodel_wordvector
+as.textmodel_lss.textmodel_wordvector <- function(x, ...) {
+  if (is.null(x$values) && is.null(x$vectors))
+    stop("x must be a valid textmodel_wordvector object")
+  if (!requireNamespace("wordvector"))
+    stop("wordvector package must be installed")
+  if (!is.null(x$values)) {
+    result <- as.textmodel_lss(t(x$values), ...)
+  } else {
+    result <- as.textmodel_lss(t(x$vectors), ...) # for wordvector v0.1.0
+  }
+  result$frequency <- x$frequency[names(result$beta)]
+  return(result)
 }
