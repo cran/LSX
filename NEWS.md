@@ -1,7 +1,13 @@
-## Changes in v1.5.0
+## Changes in v1.4.3
+
+* Improve the handling of word2vec models from the **wordvector** package in `as.textmodel_lss()`.
+* Deprecate `auto_weight` in `textmodel_lss()`.
+* Deprecate `textplot_simil()`.
+
+## Changes in v1.4.2
 
 * Add `as.textmodel_lss()` for objects from the **wordvector** package.
-* Reduce dependent packages by moving **rsparse**, **irlba** and *rsvd* to Suggests.
+* Reduce dependent packages by moving **rsparse**, **irlba** and **rsvd** to Suggests.
 * Fix handling of phrasal patterns in `textplot_terms()`.
 * Improve objects created by `as.textmodel_lss.textmodel_lss()`.
 

@@ -3,9 +3,9 @@ require(quanteda)
 # create and save test object
 # corp_sent <- corpus_reshape(data_corpus_inaugural, "sentence")
 # toks_test <- tokens(corp_sent, remove_punct = TRUE)
-# saveRDS(toks_test, "tests/data/tokens_test.RDS")
+# saveRDS(toks_test, "tests/data/tokens.RDS")
 
-toks_test <- readRDS("../data/tokens_test.RDS")
+toks_test <- readRDS("../data/tokens.RDS")
 feat_test <- head(char_context(toks_test, "america*", min_count = 1, p = 0.05), 100)
 dfmt_test <- dfm(toks_test)
 fcmt_test <- fcm(dfmt_test)
@@ -40,7 +40,7 @@ test_that("textmodel_lss has all the attributes", {
 
     expect_equal(
         names(lss_test),
-        c("data", "beta", "k", "slice", "frequency", "terms", "seeds", "seeds_weighted",
+        c("data", "beta", "beta_type", "k", "slice", "frequency", "terms", "seeds", "seeds_weighted",
           "embedding", "similarity", "concatenator", "call", "version")
     )
 
@@ -53,7 +53,7 @@ test_that("textmodel_lss has all the attributes", {
 
     expect_equal(
         names(lss_test_fcm),
-        c("data", "beta", "k", "slice", "frequency", "terms", "seeds", "seeds_weighted",
+        c("data", "beta", "beta_type", "k", "slice", "frequency", "terms", "seeds", "seeds_weighted",
           "embedding", "similarity", "concatenator", "call", "version")
     )
 
@@ -66,7 +66,7 @@ test_that("textmodel_lss has all the attributes", {
 
     expect_equal(
         names(lss_test_nd),
-        c("data", "beta", "k", "slice", "frequency", "terms", "seeds", "seeds_weighted",
+        c("data", "beta", "beta_type", "k", "slice", "frequency", "terms", "seeds", "seeds_weighted",
           "embedding", "similarity", "concatenator", "call", "version")
     )
 
@@ -515,4 +515,21 @@ test_that("rescaling still works", {
         p2 <- predict(lss_test, rescale = TRUE)
     })
     expect_identical(p1, p2)
+})
+
+test_that("textmodel_lss print messages", {
+
+  expect_output(
+    textmodel_lss(dfmt_test, seed, k = 100, verbose = TRUE),
+    "Performing SVD by RSpectra", fixed = TRUE
+  )
+  expect_warning(
+    textmodel_lss(dfmt_test, seed, features = feat_test, k = 100),
+    "'features' is deprecated; use 'terms'", fixed = TRUE
+  )
+  expect_warning(
+    textmodel_lss(dfmt_test, seed, k = 100, auto_weight = TRUE),
+    "'auto_weight' is deprecated", fixed = TRUE
+  )
+
 })
