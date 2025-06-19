@@ -1,3 +1,8 @@
+## Changes in v1.4.5
+
+* Enable grouping by multiple variables using `smooth_lss()`.
+* Fix tests for `textplot_*()` for upcoming **ggplot2**.
+
 ## Changes in v1.4.4
 
 * Fix a bug in `as.textmodel_lss()` when a `textmodel_wordvector` object is given.
