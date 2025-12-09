@@ -81,6 +81,7 @@ textmodel_lss <- function(x, ...) {
 #' @method textmodel_lss dfm
 #' @importFrom quanteda featnames meta check_integer dfm_group
 #' @importFrom Matrix colSums
+#' @importFrom utils packageVersion
 #' @export
 textmodel_lss.dfm <- function(x, seeds, terms = NULL, k = 300, slice = NULL,
                               weight = "count", cache = FALSE,
@@ -363,7 +364,7 @@ cache_glove <- function(x, w, x_max = 10, n_iter = 10, cache = TRUE, ...) {
         result <- readRDS(file_cache)
     } else {
         if (!requireNamespace("rsparse"))
-            stop("wordvector package must be installed")
+            stop("rsparse package must be installed")
         utils::capture.output({
             glove <- rsparse::GloVe$new(rank = w, x_max = x_max, ...)
             temp <- glove$fit_transform(Matrix::drop0(x), n_iter = n_iter,
